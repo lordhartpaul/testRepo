@@ -13,6 +13,11 @@ npm install && npm run build
 node dist/src/cli/main.js convert examples/mt103.txt
 ```
 
+New here? **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** is a complete
+walk through: build it, run it four ways (repo, global `mt2mx` command,
+standalone `dist/` folder, Docker), produce output files, and check the results
+against the twelve sample messages in `examples/`.
+
 ---
 
 ## What it converts
@@ -168,10 +173,14 @@ The body is either raw MT (`text/plain`) or `{"message": "...", "options": {…}
 confidence in `X-MT-Type`, `X-MX-Id` and `X-Confidence` headers. A message that
 cannot be converted comes back as `422` **with its diagnostics**.
 
-### Docker
+### Standalone
+
+There are no runtime dependencies, so the compiled output is the whole program:
 
 ```bash
-docker build -t mt2mx . && docker run -p 8080:8080 mt2mx
+npm pack && npm install -g ./swift-mt-mx-converter-1.0.0.tgz   # the mt2mx command
+cp -r dist/src /opt/mt2mx && node /opt/mt2mx/src/cli/main.js … # or just copy it
+docker build -t mt2mx . && docker run -p 8080:8080 mt2mx       # or a container
 ```
 
 ---
@@ -245,8 +254,10 @@ ends up without content disappears — `el('Dbtr', el('Nm', name))` simply is no
 emitted when `name` is undefined. Child order is preserved because the ISO
 schemas are `xs:sequence`.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data flow and
-[docs/MAPPING.md](docs/MAPPING.md) for the field-by-field mapping tables.
+See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) to run it,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data flow,
+[docs/MAPPING.md](docs/MAPPING.md) for the field-by-field mapping tables and
+[docs/API.md](docs/API.md) for the HTTP reference.
 
 ---
 
@@ -254,7 +265,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the data flow and
 
 ```bash
 npm run build       # compile to dist/
-npm test            # build, then run 179 tests with node:test
+npm test            # build, then run 182 tests with node:test
 npm run typecheck   # strict, plus noUnusedLocals / noUnusedParameters
 ```
 

@@ -64,7 +64,7 @@ describe('MT103 to pacs.008', () => {
   it('routes a field 72 code word to the creditor agent instruction', () => {
     assert.equal(
       at(root, 'CdtTrfTxInf/InstrForCdtrAgt/InstrInf'),
-      'PLEASE ADVISE BENEFICIARY ON CREDIT',
+      'ADVISE BENEFICIARY ON CREDIT',
     );
   });
 

@@ -8,6 +8,7 @@ import { parseMt } from '../mt/parser.js';
 import { supportedConversions } from '../mapping/registry.js';
 import { validateMt } from '../validation/mt-rules.js';
 import type { Diagnostic } from '../core/diagnostics.js';
+import { ignoreBrokenPipe, isEntryPoint } from './entry.js';
 import { bold, colourDiagnostic, dim } from './format.js';
 
 /**
@@ -263,26 +264,43 @@ function commandDetect(args: ParsedArgs): number {
 
 function commandValidate(args: ParsedArgs): number {
   const input = readInput(args.positional[0]);
-  const { message, diagnostics } = parseMt(input);
   const forced = typeof args.flags['type'] === 'string' ? args.flags['type'] : undefined;
-  const validation = validateMt(message, forced ?? detect(message).messageType);
-  const all = [...diagnostics, ...validation.diagnostics];
-  const errors = all.filter((d) => d.severity === 'error' || d.severity === 'fatal').length;
+
+  // A file may hold many messages, so validate each one separately rather than
+  // reading the whole file as a single malformed message.
+  const results = splitMessages(input).map((raw, index) => {
+    const { message, diagnostics } = parseMt(raw);
+    const validation = validateMt(message, forced ?? detect(message).messageType);
+    const all = [...diagnostics, ...validation.diagnostics];
+    return {
+      index,
+      messageType: forced ?? detect(message).messageType,
+      errors: all.filter((d) => d.severity === 'error' || d.severity === 'fatal').length,
+      rulesChecked: validation.rulesChecked,
+      diagnostics: all,
+    };
+  });
+
+  const totalErrors = results.reduce((sum, result) => sum + result.errors, 0);
 
   if (args.flags['json']) {
+    process.stdout.write(`${JSON.stringify({ errors: totalErrors, results }, null, 2)}\n`);
+    return totalErrors === 0 ? 0 : 1;
+  }
+
+  for (const result of results) {
+    if (results.length > 1) {
+      process.stdout.write(`${bold(`#${result.index + 1}`)} MT${result.messageType ?? '???'}\n`);
+    }
+    printDiagnostics(result.diagnostics, Boolean(args.flags['quiet']));
     process.stdout.write(
-      `${JSON.stringify({ errors, diagnostics: all, rulesChecked: validation.rulesChecked }, null, 2)}\n`,
-    );
-  } else {
-    printDiagnostics(all, Boolean(args.flags['quiet']));
-    process.stdout.write(
-      `${errors === 0 ? 'valid' : `${errors} error(s)`} - checked network rules ${
-        validation.rulesChecked.join(', ') || '(none)'
+      `${result.errors === 0 ? 'valid' : `${result.errors} error(s)`} - checked network rules ${
+        result.rulesChecked.join(', ') || '(none)'
       }\n`,
     );
   }
 
-  return errors === 0 ? 0 : 1;
+  return totalErrors === 0 ? 0 : 1;
 }
 
 function commandList(args: ParsedArgs): number {
@@ -347,6 +365,7 @@ export function run(argv: readonly string[]): number {
   }
 }
 
-if (process.argv[1]?.endsWith('main.js') ?? false) {
+if (isEntryPoint(import.meta.url)) {
+  ignoreBrokenPipe();
   process.exitCode = run(process.argv.slice(2));
 }

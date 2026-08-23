@@ -5,6 +5,7 @@ import { detect } from '../intelligence/detector.js';
 import { parseMt } from '../mt/parser.js';
 import { supportedConversions } from '../mapping/registry.js';
 import { validateMt } from '../validation/mt-rules.js';
+import { isEntryPoint } from '../cli/entry.js';
 
 /**
  * HTTP interface.
@@ -273,6 +274,6 @@ export function start(options: ServerOptions = {}): Server {
   return server;
 }
 
-if (process.argv[1]?.endsWith('server.js') ?? false) {
+if (isEntryPoint(import.meta.url)) {
   start();
 }

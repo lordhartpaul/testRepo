@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CLI = fileURLToPath(new URL('../src/cli/main.js', import.meta.url));
@@ -62,6 +65,13 @@ describe('command line interface', () => {
     assert.match(result.stderr, /MT\.RULE\.T26/);
   });
 
+  it('validates every message in a multi-message file', () => {
+    const result = run(['validate', `${EXAMPLES}batch.txt`]);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /#1 MT103/);
+    assert.match(result.stdout, /#3 MT900/);
+  });
+
   it('converts a batch and counts the results', () => {
     const result = run(['batch', `${EXAMPLES}batch.txt`, '--now', '2024-01-15T10:00:00Z']);
     assert.equal(result.status, 0);
@@ -78,6 +88,26 @@ describe('command line interface', () => {
     const result = run(['convert', '-', '--address-format', 'sideways'], ':20:R\n');
     assert.equal(result.status, 2);
     assert.match(result.stderr, /address-format/);
+  });
+
+  it('survives a closed pipe', () => {
+    // `mt2mx list | head -1` closes stdout early; the CLI must end quietly
+    // rather than crashing with an unhandled EPIPE.
+    const piped = spawnSync('/bin/sh', ['-c', `${process.execPath} ${CLI} list | head -1`], {
+      encoding: 'utf8',
+    });
+    assert.equal(piped.status, 0);
+    assert.doesNotMatch(piped.stderr, /EPIPE/);
+  });
+
+  it('runs when invoked through a bin symlink, as a global install does', () => {
+    // npm installs the bin as a symlink named after the command, so an entry
+    // point test based on the file name would silently do nothing.
+    const link = join(mkdtempSync(join(tmpdir(), 'mt2mx-')), 'mt2mx');
+    symlinkSync(CLI, link);
+    const result = spawnSync(process.execPath, [link, 'list'], { encoding: 'utf8' });
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /pacs\.008\.001\.08/);
   });
 
   it('prints its version', () => {
