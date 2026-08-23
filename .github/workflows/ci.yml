@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: node --test dist/test/*.test.js
+
+      - name: Convert the example messages
+        run: |
+          for file in examples/*.txt; do
+            case "$file" in *batch.txt) continue;; esac
+            echo "converting $file"
+            node dist/src/cli/main.js convert "$file" --now 2024-01-15T10:00:00Z > /dev/null
+          done
+          node dist/src/cli/main.js batch examples/batch.txt --now 2024-01-15T10:00:00Z > /dev/null
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t swift-mt-mx-converter:ci .

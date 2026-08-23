@@ -1,0 +1,41 @@
+{
+  "name": "swift-mt-mx-converter",
+  "version": "1.0.0",
+  "description": "Intelligent SWIFT MT to ISO 20022 MX message converter with auto-detection, semantic field resolution and validation",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "bin": {
+    "mt2mx": "./dist/src/cli/main.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "cli": "npm run build --silent && node dist/src/cli/main.js",
+    "serve": "npm run build --silent && node dist/src/api/server.js"
+  },
+  "keywords": [
+    "swift",
+    "mt",
+    "mx",
+    "iso20022",
+    "pacs.008",
+    "camt.053",
+    "payments",
+    "converter",
+    "fin"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "@types/node": "^22.0.0"
+  }
+}
