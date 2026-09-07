@@ -1,0 +1,42 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Rolling restart of a KRaft cluster (3 controllers, N brokers)
+
+|Operator|
+start
+:Announce maintenance window;
+:Verify cluster-wide preconditions
+- kafka-topics.sh --describe --under-replicated-partitions -> empty
+- kafka-reassign-partitions.sh --list -> empty
+- kafka-metadata-quorum.sh describe --status -> LeaderId != -1, MaxFollowerLag = 0;
+partition Controllers {
+  :Identify Raft leader (LeaderId);
+  while (follower voters left?) is (yes)
+    :systemctl restart kafka-controller on a FOLLOWER;
+    :Wait: describe --replication shows the voter with Lag 0;
+  endwhile (no)
+  :systemctl restart kafka-controller on the LEADER;
+  :Wait: new LeaderId elected, all voters Lag 0;
+}
+partition Brokers {
+  while (brokers left?) is (yes)
+    :Pick next broker (rotate racks);
+    if (UnderReplicatedPartitions == 0
+        and UnderMinIsrPartitionCount == 0?) then (yes)
+      :systemctl stop kafka-broker (SIGTERM -> controlled shutdown);
+      :Apply change (config, package, OS);
+      :systemctl start kafka-broker;
+      :Wait: broker listed as Observer with Lag 0,
+      URP returns to 0, LeaderCount > 0;
+    else (no)
+      :Stop rollout; investigate;
+      stop
+    endif
+  endwhile (no)
+}
+:kafka-leader-election.sh --election-type PREFERRED --all-topic-partitions;
+:Verify client error rate and p99 latency back to baseline;
+:Close change record;
+stop
+@enduml

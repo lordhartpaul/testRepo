@@ -1,0 +1,58 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka observability pipeline (metrics, lag, logs, traces)
+
+package "Kafka cluster" {
+  node "Broker (x N)" as broker {
+    component "JMX MBeans\nkafka.server / kafka.network\nkafka.log / kafka.controller" as jmx
+    component "jmx_prometheus_javaagent\n:7071/metrics" as agent
+    component "server.log\ncontroller.log\nstate-change.log\nlog-cleaner.log" as logs
+    component "KIP-714 ClientTelemetry\nreporter (3.7+)" as telemetry
+    jmx --> agent
+  }
+  node "Controller (x 3)" as ctl {
+    component "raft-metrics\nKafkaController MBeans" as cjmx
+    component "jmx_exporter :7071" as cagent
+    cjmx --> cagent
+  }
+}
+
+package "Clients" {
+  component "Producer / Consumer / Streams\nclient JMX + OTel agent" as client
+}
+
+package "Collection" {
+  component "Prometheus\n(scrape 15-30 s)" as prom
+  component "node_exporter\n(disk, net, page cache)" as node
+  component "Kafka Lag Exporter\nor Burrow or kminion" as lag
+  component "Log shipper\n(Fluent Bit / Vector / Filebeat)" as ship
+  component "OpenTelemetry Collector" as otel
+}
+
+package "Storage and UI" {
+  component "Grafana dashboards" as grafana
+  component "Alertmanager\n-> pager / chat" as am
+  component "Loki / Elasticsearch" as logstore
+  component "Tempo / Jaeger" as traces
+  component "AKHQ / Kafka UI / Redpanda Console\n(Admin API, ad-hoc inspection)" as ui
+}
+
+agent --> prom : scrape
+cagent --> prom : scrape
+node --> prom : scrape
+lag --> prom : lag, lag_seconds
+lag --> broker : Admin API\n(ListOffsets, OffsetFetch)
+client --> telemetry : PushTelemetry\n(enable.metrics.push=true)
+telemetry --> otel : OTLP
+client --> otel : traces (traceparent header)
+otel --> traces
+otel --> prom : remote write / scrape
+logs --> ship
+ship --> logstore
+prom --> grafana
+prom --> am : alert rules
+logstore --> grafana
+traces --> grafana
+ui --> broker : Admin API
+@enduml

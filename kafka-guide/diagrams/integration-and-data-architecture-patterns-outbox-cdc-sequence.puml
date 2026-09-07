@@ -1,0 +1,33 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Transactional outbox with CDC (Debezium) - atomic state change + event publish
+
+actor Client
+participant "Order service" as SVC
+database "PostgreSQL\n(orders, outbox tables)" as DB
+participant "Debezium connector\n(Kafka Connect, reads WAL)" as DBZ
+queue "Kafka topic\norders.order.events" as K
+participant "Inventory service\n(consumer, inbox table)" as INV
+
+Client -> SVC : POST /orders
+SVC -> DB : BEGIN
+SVC -> DB : INSERT INTO orders (...)
+SVC -> DB : INSERT INTO outbox\n(id, aggregate_id, type, payload, headers)
+SVC -> DB : COMMIT
+SVC --> Client : 201 Created (order_id)
+note over SVC,DB : Single local transaction:\nno dual-write problem.\nOutbox row is the event.
+DB -> DBZ : WAL / logical decoding\n(outbox insert)
+DBZ -> DBZ : EventRouter SMT:\nkey = aggregate_id,\ntopic from route field,\nheaders (id, type)
+DBZ -> K : produce OrderCreated\n(key = order_id)
+DBZ -> DB : optional: delete outbox row\n(or periodic cleanup)
+K -> INV : poll()
+INV -> INV : SELECT 1 FROM inbox WHERE event_id = ?\n(dedup, idempotent consumer)
+alt event not seen
+  INV -> INV : BEGIN; reserve stock;\nINSERT INTO inbox(event_id); COMMIT
+else duplicate (redelivery)
+  INV -> INV : skip
+end
+INV -> K : commit offset
+note over DBZ,K : Ordering per aggregate_id is preserved:\nsame key -> same partition.\nDelivery is at-least-once; consumer dedups.
+@enduml

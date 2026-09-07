@@ -1,0 +1,34 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title End-to-end latency anatomy (acks=all, RF=3)
+
+participant "Producer app" as APP
+participant "Producer\nRecordAccumulator" as ACC
+participant "Producer\nSender thread" as SND
+participant "Leader broker" as LDR
+participant "Follower 1" as F1
+participant "Follower 2" as F2
+participant "Consumer" as CON
+
+APP -> ACC : send(record)\n[serialize + partition]
+note right of ACC : wait up to linger.ms\nor until batch.size full
+ACC -> SND : batch ready
+SND -> SND : compress batch\n(compression.type)
+SND -> LDR : ProduceRequest\n(network RTT/2)
+LDR -> LDR : validate, append to log\n(page cache, RequestQueue + LocalTime)
+F1 -> LDR : FetchRequest (replica fetcher)\nreplica.fetch.wait.max.ms / min.bytes
+F2 -> LDR : FetchRequest
+LDR --> F1 : records
+LDR --> F2 : records
+F1 -> F1 : append
+F2 -> F2 : append
+F1 -> LDR : next FetchRequest carries\nnew log end offset
+F2 -> LDR : next FetchRequest
+note over LDR : high watermark advances when\nmin.insync.replicas have the offset\n(RemoteTime in request metrics)
+LDR --> SND : ProduceResponse (acks=all)
+SND --> APP : callback / future complete
+CON -> LDR : FetchRequest\n(fetch.min.bytes, fetch.max.wait.ms)
+LDR --> CON : records up to high watermark\n(zero-copy sendfile)
+CON -> CON : deserialize, poll() returns,\napplication processing
+@enduml

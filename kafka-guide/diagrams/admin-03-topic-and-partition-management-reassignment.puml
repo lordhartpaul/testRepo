@@ -1,0 +1,35 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title kafka-reassign-partitions.sh: move orders-0 from brokers [1,2,3] to [4,2,3]
+
+actor Admin
+participant "kafka-reassign-partitions.sh" as Tool
+participant "Active controller" as Ctl
+participant "Broker 1\n(old leader)" as B1
+participant "Broker 4\n(new replica)" as B4
+participant "Brokers 2,3\n(followers)" as B23
+
+Admin -> Tool : --generate (topics.json, --broker-list 4,2,3)
+Tool -> Ctl : DescribeTopics / DescribeCluster
+Tool --> Admin : current + proposed plan (save both)
+Admin -> Tool : --execute --reassignment-json-file plan.json --throttle 50000000
+Tool -> Ctl : IncrementalAlterConfigs\n(leader/follower.replication.throttled.replicas + rate)
+Tool -> Ctl : AlterPartitionReassignments(orders-0 -> [4,2,3])
+Ctl -> Ctl : replicas = [1,2,3,4] (adding=[4], removing=[1])\nwritten to __cluster_metadata
+Ctl -> B4 : metadata: become follower of orders-0
+B4 -> B1 : Fetch from log start offset (throttled)
+loop until caught up
+  B4 -> B1 : Fetch
+  B1 --> B4 : records
+end
+B1 -> Ctl : AlterPartition (ISR += 4)
+Ctl -> Ctl : target reached: ISR contains all of [4,2,3]
+Ctl -> Ctl : elect leader among [4,2,3] (2, first in list not removed),\nremove 1 from replicas, write PartitionChangeRecord
+Ctl -> B1 : metadata: stop replica orders-0, delete local log
+Ctl -> B23 : metadata: new replica set
+Admin -> Tool : --verify --reassignment-json-file plan.json
+Tool -> Ctl : ListPartitionReassignments
+Tool --> Admin : "Reassignment of partition orders-0 is completed"
+Tool -> Ctl : remove throttles (only on --verify, only when all done)
+@enduml

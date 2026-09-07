@@ -1,0 +1,69 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Multi-region Kafka deployment: primary (eu-west-1) and DR (eu-central-1) with MirrorMaker 2
+
+cloud "Global DNS\nkafka.example.com (weighted / failover record)" as dns
+
+node "Region A: eu-west-1 (primary)" as A {
+  node "AZ a" as Aa {
+    node "controller-1" as ac1
+    node "broker-1" as ab1
+    node "broker-4" as ab4
+  }
+  node "AZ b" as Ab {
+    node "controller-2" as ac2
+    node "broker-2" as ab2
+    node "broker-5" as ab5
+  }
+  node "AZ c" as Ac {
+    node "controller-3" as ac3
+    node "broker-3" as ab3
+    node "broker-6" as ab6
+  }
+  database "Object storage\n(tiered storage bucket A)" as s3a
+  component "Producers + consumers\n(active)" as appA
+}
+
+node "Region B: eu-central-1 (DR)" as B {
+  node "AZ a" as Ba {
+    node "controller-1" as bc1
+    node "broker-1" as bb1
+  }
+  node "AZ b" as Bb {
+    node "controller-2" as bc2
+    node "broker-2" as bb2
+  }
+  node "AZ c" as Bc {
+    node "controller-3" as bc3
+    node "broker-3" as bb3
+  }
+  node "MirrorMaker 2 cluster\n(connect-mirror-maker.sh x3)" as mm2
+  database "Object storage\n(tiered storage bucket B)" as s3b
+  component "Consumers (warm standby)\nProducers (idle)" as appB
+}
+
+database "Git: topics, ACLs,\nschemas, quotas as code" as git
+
+dns --> ab1 : active
+dns ..> bb1 : failover
+appA --> ab1
+appB ..> bb1
+mm2 --> ab1 : consume (source)\nSASL_SSL over inter-region link
+mm2 --> bb1 : produce (target)
+ab1 --> s3a : remote log segments
+bb1 --> s3b : remote log segments
+git ..> ab1 : apply
+git ..> bb1 : apply
+
+note bottom of mm2
+  Run MM2 in the target region:
+  a consumer tolerates WAN latency
+  better than a producer does.
+end note
+note bottom of A
+  rack awareness: broker.rack = AZ id
+  replication.factor=3, min.insync.replicas=2
+  Controllers spread one per AZ.
+end note
+@enduml

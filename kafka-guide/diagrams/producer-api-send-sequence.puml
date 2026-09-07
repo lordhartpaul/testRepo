@@ -1,0 +1,36 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title KafkaProducer send path with acks=all and idempotence
+
+participant "Application thread" as App
+participant "KafkaProducer\n(interceptors, serializer, partitioner)" as Prod
+participant "RecordAccumulator" as Acc
+participant "Sender I/O thread" as Sender
+participant "Broker 1\n(leader of orders-0)" as Leader
+participant "Broker 2 / 3\n(followers)" as Followers
+
+App -> Prod : send(record, callback)
+Prod -> Prod : onSend() interceptors
+Prod -> Prod : serialize key/value\n(SerializationException thrown here)
+Prod -> Prod : partition = murmur2(key) % n
+Prod -> Acc : append(topic-partition, bytes)
+note right of Acc : blocks up to max.block.ms\nif buffer.memory is exhausted
+Acc --> App : Future<RecordMetadata>
+
+... linger.ms elapses or batch.size reached ...
+
+Sender -> Acc : drain ready batches per broker
+Sender -> Leader : ProduceRequest(acks=all,\n PID, epoch, baseSequence)
+Leader -> Leader : validate sequence\nappend to log
+Followers -> Leader : Fetch (replication)
+Leader -> Leader : high watermark advances\nwhen ISR caught up
+Leader --> Sender : ProduceResponse(offset) or error
+alt success
+  Sender -> App : callback(metadata, null)\n(runs on I/O thread)
+else retriable error (NotLeaderOrFollower, NotEnoughReplicas)
+  Sender -> Sender : backoff retry.backoff.ms,\nrefresh metadata, retry\nuntil delivery.timeout.ms
+else non-retriable error (RecordTooLarge, InvalidTopic)
+  Sender -> App : callback(null, exception)
+end
+@enduml

@@ -1,0 +1,43 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Deciding how to apply a broker configuration change
+
+start
+:Identify the config name and its
+"Dynamic Update Mode" in the docs;
+if (Has a topic-level twin and only some topics need it?) then (yes)
+  :kafka-configs.sh --entity-type topics
+  --entity-name <topic> --alter --add-config;
+  :Also add to topic-as-code repo (GitOps);
+  stop
+endif
+if (Mode?) then (read-only)
+  :Change server.properties in config management
+  for ALL brokers;
+  :Rolling restart (chapter 04):
+  URP=0 before each broker,
+  controller last;
+  stop
+elseif (per-broker)
+  :kafka-configs.sh --entity-type brokers
+  --entity-name <id> --alter --add-config;
+  :Repeat per broker or use --entity-default
+  if it is the same everywhere;
+else (cluster-wide)
+  :Test on ONE broker first with --entity-name;
+  :Watch metrics 10-30 min;
+  if (Healthy?) then (yes)
+    :Promote with --entity-default;
+    :Delete the per-broker override
+    (--delete-config) so the default applies;
+  else (no)
+    :--delete-config on that broker;
+    stop
+  endif
+endif
+:Mirror the value into server.properties
+so a restart cannot regress it;
+:Record change in CHANGELOG / ticket;
+stop
+@enduml

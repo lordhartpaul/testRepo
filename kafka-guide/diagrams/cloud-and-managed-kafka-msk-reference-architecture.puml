@@ -1,0 +1,69 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title AWS MSK reference architecture (provisioned cluster, 3 AZs, private access)
+
+cloud "AWS Region" {
+  node "Application VPC" as AVPC {
+    node "AZ-a subnet" as SA {
+      [Producer / consumer pods\n(EKS, client.rack=use1-az1)] as APPA
+      [MSK broker 1\nkafka.m7g.xlarge] as B1
+      [MSK Connect worker\n(Debezium, S3 sink)] as MCA
+    }
+    node "AZ-b subnet" as SB {
+      [App pods] as APPB
+      [MSK broker 2] as B2
+      [MSK Connect worker] as MCB
+    }
+    node "AZ-c subnet" as SC {
+      [App pods] as APPC
+      [MSK broker 3] as B3
+    }
+    [MSK-managed KRaft\ncontrollers (hidden)] as CTRL
+  }
+  database "EBS gp3 per broker\n+ MSK tiered storage (S3)" as EBS
+  [MSK Replicator\n(to DR region)] as REP
+  [AWS Glue Schema Registry\nor self-managed registry] as GSR
+  [IAM\n(SASL/IAM auth, policies)] as IAM
+  [CloudWatch / Prometheus\n(open monitoring, JMX exporter)] as MON
+  [Secrets Manager\n(SASL/SCRAM secrets)] as SM
+}
+node "Other VPC / account" as OVPC {
+  [Consumers via\nPrivateLink multi-VPC connectivity] as EXT
+}
+cloud "DR region" as DR {
+  [MSK cluster (secondary)] as MSK2
+}
+
+APPA --> B1 : SASL_SSL/IAM :9098
+APPB --> B2
+APPC --> B3
+APPA ..> B2 : follower fetch\nrack-aware
+B1 <-> B2 : replication
+B2 <-> B3
+B1 <-> B3
+B1 ..> CTRL
+B2 ..> CTRL
+B3 ..> CTRL
+B1 --> EBS
+MCA --> B1
+MCB --> B2
+B1 --> MON
+B1 ..> IAM : authorize
+APPA ..> GSR : schemas
+APPA ..> SM : credentials (SCRAM option)
+EXT --> B1 : PrivateLink endpoint
+REP ..> B1 : read
+REP --> MSK2 : replicate topics + offsets
+
+note bottom of CTRL
+  Controllers are managed by MSK;
+  not visible or billable as brokers.
+end note
+note right of EBS
+  Provisioned storage per broker;
+  provisioned throughput option;
+  tiered storage moves older
+  segments to S3 (MSK-managed).
+end note
+@enduml

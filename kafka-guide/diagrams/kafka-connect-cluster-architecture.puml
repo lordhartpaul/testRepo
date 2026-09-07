@@ -1,0 +1,43 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka Connect distributed cluster (group.id = connect-cluster)
+
+database "PostgreSQL\n(WAL / logical replication)" as PG
+cloud "S3 bucket" as S3
+
+package "Connect worker 1 (REST :8083)" as W1 {
+  component "Debezium PostgresConnector\n(connector instance)" as DBZC
+  component "PostgresConnectorTask 0" as DBZT
+  component "S3SinkConnector task 0" as S3T0
+}
+package "Connect worker 2 (REST :8083)" as W2 {
+  component "S3SinkConnector\n(connector instance)" as S3C
+  component "S3SinkConnector task 1" as S3T1
+  component "JdbcSourceTask 0" as JT
+}
+
+package "Kafka cluster" {
+  queue "connect-configs\n(1 partition, compacted)" as CFG
+  queue "connect-offsets\n(25 partitions, compacted)" as OFF
+  queue "connect-status\n(5 partitions, compacted)" as STAT
+  queue "inventory.public.orders" as T1
+  queue "inventory.public.customers" as T2
+}
+
+actor "Operator / CI" as Op
+Op -> W1 : POST /connectors\nPUT /connectors/{name}/config
+W1 -> CFG : connector config (leader worker writes)
+CFG --> W2 : config change -> rebalance tasks
+
+PG --> DBZT : pgoutput stream
+DBZT --> T1 : SourceRecord -> converter -> ProducerRecord
+DBZT --> T2
+DBZT --> OFF : {lsn, txId} every offset.flush.interval.ms
+T1 --> S3T0 : consumer group connect-s3-sink
+T2 --> S3T1
+S3T0 --> S3 : put objects, then commit consumer offsets
+S3T1 --> S3
+W1 --> STAT : RUNNING / FAILED per connector and task
+W2 --> STAT
+@enduml

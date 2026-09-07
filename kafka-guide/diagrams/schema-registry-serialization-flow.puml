@@ -1,0 +1,35 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Avro serialization with Schema Registry lookup (TopicNameStrategy, subject orders-value)
+
+participant "Producer app" as P
+participant "KafkaAvroSerializer\n(local cache)" as S
+participant "Schema Registry\n(REST :8081)" as SR
+database "_schemas topic\n(1 partition, compacted)" as ST
+participant "Kafka topic orders" as T
+participant "KafkaAvroDeserializer\n(local cache)" as D
+participant "Consumer app" as C
+
+P -> S : serialize("orders", OrderCreated record)
+S -> S : schema = record.getSchema()\ncache miss?
+alt cache miss
+  S -> SR : POST /subjects/orders-value/versions\n{"schema": "...", "schemaType": "AVRO"}
+  SR -> SR : compatibility check vs\nprevious versions (BACKWARD)
+  SR -> ST : append {subject, version, id, schema}
+  SR --> S : {"id": 42}
+  S -> S : cache schema -> 42
+else cache hit
+  S -> S : id = 42
+end
+S -> T : bytes = [0x00][00 00 00 2A][avro binary]
+T -> D : bytes
+D -> D : magic byte == 0 ?\nid = 42, cache miss?
+alt cache miss
+  D -> SR : GET /schemas/ids/42
+  SR --> D : {"schema": "..."}
+  D -> D : cache 42 -> writer schema
+end
+D -> D : Avro resolution:\nwriter schema (id 42) -> reader schema\n(generated class or GenericRecord)
+D --> C : OrderCreated
+@enduml
