@@ -59,7 +59,7 @@ need synchronous confirmation for a batch, call `flush()` once for the batch.
 caller of a REST endpoint?
 
 ### Q3. Which producer exceptions are retriable, which are fatal, and where do they surface?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Producer API
+**Role:** [DEV] | **Difficulty:** ★★★ | **Topic:** Producer API
 
 **Answer.**
 Synchronously from `send()`: `SerializationException`, `TimeoutException` when metadata is not available or the buffer is full
@@ -106,7 +106,7 @@ distribution" (the default already does it) or business routing that belongs in 
 not exist?
 
 ### Q6. What are producer interceptors and what are they good for?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Producer API
+**Role:** [DEV] | **Difficulty:** ★☆☆ | **Topic:** Producer API
 
 **Answer.**
 `ProducerInterceptor<K,V>` has `onSend(ProducerRecord)` (called on the caller thread before serialization; it may return a
@@ -298,7 +298,7 @@ Gotcha: a rebalance that revokes and reassigns a partition clears its paused sta
 **Follow-up probes.** How does Spring Kafka expose pause/resume? Why is `pause()` better than `Thread.sleep()` for a retry delay?
 
 ### Q17. Is `KafkaConsumer` thread-safe, and how do you parallelise processing?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Consumer API
+**Role:** [DEV] | **Difficulty:** ★★★ | **Topic:** Consumer API
 
 **Answer.**
 No; every method except `wakeup()` must be called from the thread that owns the consumer, and concurrent access throws
@@ -325,7 +325,7 @@ the `try` or catch `WakeupException` a second time.
 **Follow-up probes.** What does `close(Duration)` wait for? Why does a static member's `close()` not trigger a rebalance?
 
 ### Q19. Explain the fetch-sizing configs and how they interact with `max.poll.records`.
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Consumer API
+**Role:** [DEV] | **Difficulty:** ★☆☆ | **Topic:** Consumer API
 
 **Answer.**
 A fetch request asks each broker for data from all assigned partitions it leads: `fetch.min.bytes` (1) and `fetch.max.wait.ms`
@@ -498,7 +498,7 @@ key and never trigger repartitioning; prefer them whenever you do not touch the 
 orphan topic?
 
 ### Q28. Explain tumbling, hopping, sliding and session windows.
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Kafka Streams
+**Role:** [DEV] | **Difficulty:** ★☆☆ | **Topic:** Kafka Streams
 
 **Answer.**
 Tumbling: fixed size, non-overlapping (`TimeWindows.ofSizeAndGrace(Duration.ofMinutes(5), Duration.ofMinutes(1))`).
@@ -528,7 +528,7 @@ hopping windows multiply state and output by size/advance; prefer sliding window
 **Follow-up probes.** Which window type has a changelog with `compact,delete`? How is retention derived from grace?
 
 ### Q29. What is the grace period and how does Streams handle late records?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Kafka Streams
+**Role:** [DEV] | **Difficulty:** ★★★ | **Topic:** Kafka Streams
 
 **Answer.**
 Grace is how long after a window's end (in stream time, the maximum event timestamp seen by the task) Streams still accepts records
@@ -646,7 +646,7 @@ native memory leaks on each store close.
 choose in-memory stores instead?
 
 ### Q36. How do interactive queries work, including across instances?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Kafka Streams
+**Role:** [DEV] | **Difficulty:** ★★★ | **Topic:** Kafka Streams
 
 **Answer.**
 A materialized store (`Materialized.as("orders-by-customer")`) can be read locally with
@@ -769,7 +769,7 @@ mismatched converters between source and sink are the most common Connect failur
 **Follow-up probes.** Which component owns the consumer group for a sink? Where do source offsets go?
 
 ### Q43. What is the difference between a converter and a serializer, and how do you choose?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Kafka Connect
+**Role:** [DEV] | **Difficulty:** ★☆☆ | **Topic:** Kafka Connect
 
 **Answer.**
 A converter (`org.apache.kafka.connect.storage.Converter`) translates between Connect's schema-aware in-memory data model and
@@ -985,7 +985,7 @@ against every topic using that record, so a compatible change for one topic can 
 with `TopicNameStrategy` (schema references)?
 
 ### Q55. Explain the compatibility modes and which one to pick.
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Schema Registry
+**Role:** [DEV] | **Difficulty:** ★☆☆ | **Topic:** Schema Registry
 
 **Answer.**
 | Mode | New schema must be able to... | Upgrade order | Allowed changes (Avro) |
@@ -1076,7 +1076,7 @@ because the serializer tries to register the branch type, not the union; set `us
 ## Transactions and exactly-once
 
 ### Q60. What does `transactional.id` do and how does fencing work?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Transactions
+**Role:** [DEV] | **Difficulty:** ★★★ | **Topic:** Transactions
 
 **Answer.**
 `transactional.id` is a stable name for a logical producer across restarts: `initTransactions()` asks the transaction coordinator
@@ -1287,7 +1287,7 @@ table must be pruned or it becomes the largest table in the database.
 **Follow-up probes.** How do you preserve ordering per aggregate? What is the polling-relay alternative's cost?
 
 ### Q71. What is the claim-check pattern and when do you use it?
-**Role:** [ARCH] | **Difficulty:** ★★☆ | **Topic:** Error handling
+**Role:** [ARCH] | **Difficulty:** ★☆☆ | **Topic:** Error handling
 
 **Answer.**
 For payloads above the practical Kafka message size (a few hundred KB, or anything near `max.message.bytes`), the producer
@@ -1378,7 +1378,7 @@ atomic; enable the container's transaction manager if the duplicate matters.
 **Follow-up probes.** How does it behave with batch listeners? How do you observe retry rates per level?
 
 ### Q76. How do `KafkaTemplate` and Spring transactions fit together?
-**Role:** [DEV] | **Difficulty:** ★★☆ | **Topic:** Spring Kafka
+**Role:** [DEV] | **Difficulty:** ★★★ | **Topic:** Spring Kafka
 
 **Answer.**
 `KafkaTemplate.send()` returns a `CompletableFuture<SendResult<K,V>>` (since Spring Kafka 3.0) built on a `ProducerFactory`;
