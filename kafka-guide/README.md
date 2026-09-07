@@ -5,7 +5,8 @@ A complete, evolving guide book and question bank for Apache Kafka, written for 
 
 - Baseline: Apache Kafka 3.9 / 4.0 (KRaft). ZooKeeper appears only in migration and legacy sections.
 - Diagrams: Mermaid (renders on GitHub) plus PlantUML sources in `diagrams/`.
-- Every chapter ends with interview questions. The question bank holds 300+ more, plus 35 scenarios and 25 coding exercises.
+- Every chapter ends with interview questions. The question bank holds 300 more, plus 35 scenarios and 25 coding exercises.
+- Size: 30 chapters, about 31,000 lines, 177 Mermaid diagrams and 30 PlantUML diagrams.
 - The guide grows with reader input. See `CHANGELOG.md` and the "Requesting additions" section.
 
 ## Start here
