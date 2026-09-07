@@ -1,0 +1,58 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Production KRaft deployment: isolated controllers, rack-aware brokers
+
+node "AZ / rack A" as A {
+  node "controller-1\nprocess.roles=controller\nnode.id=1" as C1
+  node "broker-101\nprocess.roles=broker\nbroker.rack=A" as B101 {
+    database "log.dirs\n(XFS, JBOD)" as D101
+  }
+  node "broker-104\nbroker.rack=A" as B104
+}
+node "AZ / rack B" as B {
+  node "controller-2\nnode.id=2" as C2
+  node "broker-102\nbroker.rack=B" as B102
+  node "broker-105\nbroker.rack=B" as B105
+}
+node "AZ / rack C" as C {
+  node "controller-3\nnode.id=3" as C3
+  node "broker-103\nbroker.rack=C" as B103
+  node "broker-106\nbroker.rack=C" as B106
+}
+
+cloud "Producers / consumers\nbootstrap.servers=broker-101:9092,broker-102:9092,broker-103:9092" as Clients
+node "Observability\n(JMX exporter, Prometheus, Grafana)" as Obs
+node "Admin tooling\nkafka-metadata-quorum.sh\nkafka-topics.sh" as Admin
+
+C1 <..> C2 : Raft (port 9093)\ncontroller.quorum.bootstrap.servers
+C2 <..> C3 : Raft
+C1 <..> C3 : Raft
+
+B101 --> C1 : BrokerHeartbeat\nmetadata Fetch (observer)
+B102 --> C1
+B103 --> C1
+B104 --> C1
+B105 --> C1
+B106 --> C1
+
+B101 <--> B102 : replica Fetch (port 9092 / replication listener)
+B102 <--> B103
+B101 <--> B103
+
+Clients --> B101 : Produce / Fetch (9092, SASL_SSL)
+Clients --> B102
+Clients --> B103
+Admin --> B101 : forwarded to active controller
+Obs --> B101 : JMX
+Obs --> C1 : JMX
+
+note bottom of C1
+  Exactly one active controller at a time.
+  Quorum survives loss of one of three voters.
+end note
+note bottom of B106
+  Replication factor 3 with rack awareness places
+  each replica of a partition in a different rack.
+end note
+@enduml

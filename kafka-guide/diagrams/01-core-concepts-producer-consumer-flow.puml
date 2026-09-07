@@ -1,0 +1,51 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Core components: producer, cluster, consumer groups
+
+component "Producer\n(serializer, partitioner,\nbatching)" as Producer
+
+package "Kafka cluster (KRaft, 3 brokers)" {
+  node "Broker 1" as B1 {
+    database "orders-0 (leader)" as P0L
+    database "orders-1 (follower)" as P1F
+  }
+  node "Broker 2" as B2 {
+    database "orders-1 (leader)" as P1L
+    database "orders-2 (follower)" as P2F
+  }
+  node "Broker 3" as B3 {
+    database "orders-2 (leader)" as P2L
+    database "orders-0 (follower)" as P0F
+  }
+  database "__consumer_offsets" as Offsets
+  collections "KRaft controller quorum\n__cluster_metadata" as Ctrl
+}
+
+package "Consumer group: billing" {
+  component "consumer A\norders-0, orders-1" as CA
+  component "consumer B\norders-2" as CB
+}
+package "Consumer group: analytics" {
+  component "consumer X\norders-0,1,2" as CX
+}
+
+Producer --> P0L : Produce (acks=all)
+Producer --> P1L
+Producer --> P2L
+P0L ..> P0F : replicate (Fetch)
+P1L ..> P1F : replicate (Fetch)
+P2L ..> P2F : replicate (Fetch)
+P0L --> CA : Fetch
+P1L --> CA : Fetch
+P2L --> CB : Fetch
+P0L --> CX
+P1L --> CX
+P2L --> CX
+CA --> Offsets : OffsetCommit
+CB --> Offsets : OffsetCommit
+CX --> Offsets : OffsetCommit
+Ctrl ..> B1 : metadata (leaders, ISR)
+Ctrl ..> B2
+Ctrl ..> B3
+@enduml

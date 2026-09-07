@@ -1,0 +1,33 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Tiered storage: segment life cycle (KIP-405, production-ready since 3.9)
+
+participant "Producer" as P
+participant "Leader broker\n(local log)" as L
+participant "RemoteLogManager\n(copier / expiration pools)" as RLM
+participant "RemoteStorageManager\n(S3 / GCS / Azure plugin)" as RSM
+participant "RemoteLogMetadataManager\n(__remote_log_metadata)" as RLMM
+participant "Consumer" as C
+
+P -> L : Produce
+L -> L : append to active segment
+L -> L : roll segment at segment.bytes / segment.ms
+... HW advances past the closed segment ...
+RLM -> L : find closed segments below HW\nnot yet copied
+RLM -> RLMM : COPY_SEGMENT_STARTED
+RLM -> RSM : copyLogSegmentData(.log, .index,\n.timeindex, .txnindex, snapshot, epochs)
+RSM --> RLM : ok
+RLM -> RLMM : COPY_SEGMENT_FINISHED
+... local.retention.ms / local.retention.bytes exceeded ...
+RLM -> L : delete local copy of uploaded segment\n(advance local log start offset)
+C -> L : Fetch(offset in remote range)
+L -> RLMM : lookup remote segment for offset + leader epoch
+L -> RSM : fetchLogSegment(range)
+RSM --> L : bytes
+L --> C : records (served through remote.log.reader.threads)
+... retention.ms / retention.bytes exceeded ...
+RLM -> RLMM : DELETE_SEGMENT_STARTED
+RLM -> RSM : deleteLogSegmentData
+RLM -> RLMM : DELETE_SEGMENT_FINISHED
+@enduml

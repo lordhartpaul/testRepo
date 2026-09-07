@@ -1,0 +1,48 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Classic consumer group protocol: join, sync, heartbeat, cooperative rebalance
+
+participant "Consumer A\n(leader of the group)" as A
+participant "Consumer B\n(new member)" as B
+participant "Group coordinator\n(broker owning\n__consumer_offsets partition)" as GC
+
+== Group discovery ==
+B -> GC : FindCoordinator(group.id)
+GC --> B : coordinator = broker 102
+
+== Rebalance triggered by B joining (cooperative-sticky) ==
+B -> GC : JoinGroup(member.id="", protocols=[cooperative-sticky], owned=[])
+GC -> GC : state Stable -> PreparingRebalance, generation++
+A -> GC : Heartbeat
+GC --> A : REBALANCE_IN_PROGRESS
+A -> A : onPartitionsRevoked([]) - cooperative: keep all owned partitions
+A -> GC : JoinGroup(member.id=A, protocols=[cooperative-sticky], owned=[p0,p1,p2,p3])
+GC -> GC : all members joined (or group.initial.rebalance.delay.ms) -> CompletingRebalance
+GC --> A : JoinGroupResponse(leader=A, members=[A(owned p0..p3), B(owned none)])
+GC --> B : JoinGroupResponse(leader=A)
+A -> A : run assignor: A keeps p0,p1 ; B gets p2,p3\nbut p2,p3 are still owned by A -> assign A=[p0,p1], B=[]
+A -> GC : SyncGroup(assignments)
+B -> GC : SyncGroup()
+GC -> GC : state Stable
+GC --> A : SyncGroupResponse([p0,p1])
+GC --> B : SyncGroupResponse([])
+A -> A : onPartitionsRevoked([p2,p3]) - commit offsets, then
+A -> GC : JoinGroup(owned=[p0,p1]) - second rebalance round
+B -> GC : JoinGroup(owned=[])
+GC --> A : JoinGroupResponse(leader=A)
+A -> GC : SyncGroup(A=[p0,p1], B=[p2,p3])
+B -> GC : SyncGroup()
+GC --> A : SyncGroupResponse([p0,p1])
+GC --> B : SyncGroupResponse([p2,p3])
+B -> B : onPartitionsAssigned([p2,p3]) - fetch committed offsets, start polling
+
+== Steady state ==
+loop every heartbeat.interval.ms (3000)
+  A -> GC : Heartbeat(generation)
+  GC --> A : OK
+  B -> GC : Heartbeat(generation)
+  GC --> B : OK
+end
+note over GC : no heartbeat within session.timeout.ms (45000)\nor no poll within max.poll.interval.ms (300000)\n-> member removed, new rebalance
+@enduml
