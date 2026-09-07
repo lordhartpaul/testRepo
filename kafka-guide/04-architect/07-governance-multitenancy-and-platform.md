@@ -74,11 +74,11 @@ sequenceDiagram
     Git->>CI: trigger
     CI->>CI: naming lint, partition budget check, retention policy, classification tags present
     CI->>K: schema compatibility test against registry (dry run)
-    CI-->>Git: status checks pass; platform reviewer approves only if budget exceeded
+    CI-->>Git: status checks pass, platform reviewer approves only if budget exceeded
     Git->>Op: merge to main
     Op->>K: create topic, prefixed ACLs, quotas, register schema
     Op->>Cat: publish AsyncAPI doc, owner, lineage stub
-    K-->>Dev: credentials via secret store; dashboard auto-created
+    K-->>Dev: credentials via secret store, dashboard auto-created
 ```
 
 ### 2.3 Platform components

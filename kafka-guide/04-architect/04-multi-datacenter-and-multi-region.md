@@ -99,7 +99,7 @@ sequenceDiagram
     P->>DNS: re-resolve on reconnect (client.dns.lookup, metadata refresh)
     P->>B: produce to orders (IdentityReplicationPolicy) or primary.orders
     Ops->>C: restart consumers with translated offsets (checkpoints / synced groups)
-    C->>B: consume from translated offset; idempotent processing absorbs replay
+    C->>B: consume from translated offset, idempotent processing absorbs replay
     Note over A,B: When A returns: reverse MM2 direction B → A, reconcile, plan failback
 ```
 
