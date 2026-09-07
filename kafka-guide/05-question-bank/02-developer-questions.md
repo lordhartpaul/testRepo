@@ -1274,7 +1274,7 @@ sequenceDiagram
   participant DB as Database
   participant DZ as Debezium (CDC)
   participant K as Kafka
-  S->>DB: BEGIN; UPDATE orders; INSERT INTO outbox(id, aggregate_id, type, payload); COMMIT
+  S->>DB: one transaction: UPDATE orders + INSERT INTO outbox(id, aggregate_id, type, payload) + COMMIT
   DB-->>DZ: WAL / binlog change for outbox
   DZ->>K: produce(key=aggregate_id, value=payload, headers: id, type)
   Note over K: consumers dedup on outbox id (at-least-once relay)
