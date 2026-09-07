@@ -641,7 +641,7 @@ sequenceDiagram
     P->>TC: InitProducerId(transactional.id) — blocks ≤ max.block.ms
     TC-->>P: producerId, epoch (fences older instances)
     P->>TC: beginTransaction (local)
-    P->>L: produce (verification per partition since 3.6; implicit AddPartitions in transaction v2, 4.0)
+    P->>L: produce (verification per partition since 3.6, implicit AddPartitions in transaction v2 (4.0))
     Note over TC: timer: transaction.timeout.ms (60 s, capped by broker transaction.max.timeout.ms 15 min)
     P->>TC: sendOffsetsToTransaction / commitTransaction
     TC->>L: write COMMIT markers (WriteTxnMarkers)
