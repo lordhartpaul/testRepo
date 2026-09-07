@@ -1,7 +1,7 @@
 # Consumer API
 
 **Roles:** [DEV] [ARCH] [ADMIN]   **Level:** Intermediate
-**Prerequisites:** [Fundamentals: consumer groups and offsets](../01-fundamentals/), [Producer API](01-producer-api.md)
+**Prerequisites:** [Fundamentals: consumer internals](../01-fundamentals/05-consumer-internals.md), [Producer API](01-producer-api.md)
 
 ## What you will learn
 - The `KafkaConsumer` lifecycle, what `poll()` really does, and how to stop a consumer cleanly with `wakeup()`
@@ -25,7 +25,7 @@ flowchart TD
     subgraph Group["consumer group: order-processors"]
         C1["Consumer A<br/>orders-0, orders-1"]
         C2["Consumer B<br/>orders-2"]
-        C3["Consumer C<br/>(idle: 3 partitions, 3 consumers... spare)"]
+        C3["Consumer C<br/>(idle: no partition left)"]
     end
     T0["orders-0"] --> C1
     T1["orders-1"] --> C1

@@ -24,7 +24,7 @@ flowchart LR
         ST -. "source offsets" .-> OFFT["connect-offsets"]
     end
     subgraph Sink["Sink pipeline (Kafka -> external)"]
-        K2["Kafka topic"] --> CONS["Worker consumer<br/>group connect-<name>"]
+        K2["Kafka topic"] --> CONS["Worker consumer<br/>group connect-(connector name)"]
         CONS --> CONV2["Converter<br/>bytes -> Connect Struct"]
         CONV2 --> SMT2["Transforms"]
         SMT2 --> SK["SinkTask.put(Collection of SinkRecord)"]

@@ -1,7 +1,7 @@
 # Producer API
 
 **Roles:** [DEV] [ARCH] [ADMIN]   **Level:** Intermediate
-**Prerequisites:** [Fundamentals: topics, partitions, replication](../01-fundamentals/) (log structure, ISR, `acks`)
+**Prerequisites:** [Fundamentals: producer internals](../01-fundamentals/04-producer-internals.md), [Cluster architecture](../01-fundamentals/02-cluster-architecture.md) (log structure, ISR, `acks`)
 
 ## What you will learn
 - The lifecycle of a `KafkaProducer` and what happens between `send()` and the broker acknowledgement

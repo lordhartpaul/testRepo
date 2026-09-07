@@ -1,0 +1,57 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title CI pipeline for a Kafka application (unit -> contract -> integration -> perf gate)
+
+|Developer|
+start
+:git push / open PR;
+
+|CI runner|
+:mvn -q compile;
+:Unit tests
+(MockProducer, MockConsumer,
+TopologyTestDriver);
+if (unit tests green?) then (no)
+  :fail fast;
+  stop
+endif
+
+:Schema contract check
+kafka-schema-registry-maven-plugin:test-compatibility
+against staging registry;
+if (compatible?) then (no)
+  :block merge:
+  breaking schema change;
+  stop
+endif
+
+:Integration tests
+Testcontainers apache/kafka:3.9.0 (KRaft)
++ Schema Registry container;
+note right
+  real broker, real serializers,
+  rebalance and EOS scenarios
+end note
+if (integration green?) then (no)
+  :fail;
+  stop
+endif
+
+:Build image, push :sha;
+
+|Staging|
+:Deploy to staging;
+:Perf smoke test
+kafka-producer-perf-test / consumer-perf-test
+compare p99 latency and throughput
+with previous build (indicative);
+:Chaos scenario
+kill one consumer pod mid-rebalance,
+assert no lost / duplicated effects;
+
+|Release|
+:Register schemas (register goal);
+:Promote image;
+stop
+@enduml

@@ -1,0 +1,57 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka-as-a-Service platform components and tenant isolation layers
+
+package "Tenant teams (domains)" {
+  [Team Orders\nnamespace: orders.*] as T1
+  [Team Payments\nnamespace: payments.*] as T2
+  [Team Analytics\nread-only consumer] as T3
+}
+
+package "Self-service control plane (platform team)" {
+  [Git repo: topics, schemas,\nACLs, quotas as code] as GIT
+  [CI: schema compatibility,\nnaming lint, partition budget,\nPII classification checks] as CI
+  [GitOps operator / applier\n(Strimzi Topic+User Operator,\nTerraform, julie-ops)] as OP
+  [Event catalog\n(AsyncAPI, ownership,\nlineage - DataHub/OpenLineage)] as CAT
+  [Chargeback / cost allocation\n(bytes, partitions, storage\nper tenant principal)] as COST
+}
+
+package "Data plane" {
+  node "Kafka cluster (per env / per tier)" as K {
+    [Prefix ACLs\norders.* -> Team Orders] as ACL
+    [Quotas per principal\nproducer_byte_rate,\nconsumer_byte_rate,\nrequest_percentage] as Q
+    [Partition budget\n(CreateTopicPolicy,\ncontroller_mutation_rate)] as PB
+    [Topics] as TOP
+  }
+  [Schema Registry\n(compatibility per subject,\nmode READONLY in prod)] as SR
+  [Kafka Connect\n(per-tenant worker groups\nor shared with RBAC)] as CN
+  [Observability\n(lag, quotas, throttle-time,\nper-tenant dashboards)] as OBS
+}
+
+T1 --> GIT : PR: new topic + schema
+T2 --> GIT
+CI --> GIT : validate PR
+GIT --> OP : merge -> apply
+OP --> TOP : create/alter topics
+OP --> ACL : bind principals
+OP --> Q : set quotas
+OP --> SR : register schemas (CI-only)
+OP --> CAT : publish AsyncAPI, owner
+T1 --> TOP : produce/consume\n(SASL/OAuth principal)
+T3 --> TOP : consume (Read ACL only)
+T1 ..> SR : fetch schema by id
+PB ..> TOP : enforce max partitions\nper topic / per tenant
+OBS --> COST : usage metrics
+COST --> T1 : monthly statement
+OBS --> T1 : lag / throttle alerts
+
+note bottom of ACL
+  Isolation layers, inner to outer:
+  1. Naming prefix (namespace)
+  2. Prefixed ACLs / RBAC
+  3. Quotas (bandwidth, requests)
+  4. Partition budget / policies
+  5. Separate cluster (tier / env / domain)
+end note
+@enduml
