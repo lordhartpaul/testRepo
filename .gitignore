@@ -1,1 +1,4 @@
 /myAllProject/nbproject/private/
+# Kafka guide tooling
+kafka-guide/diagrams/plantuml.jar
+kafka-guide/diagrams/rendered/
