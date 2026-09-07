@@ -385,7 +385,7 @@ end note
 @enduml
 ```
 
-Source: `diagrams/07-backup-recovery-and-dr-multi-region-deployment.puml`.
+Source: `diagrams/admin-07-backup-recovery-and-dr-multi-region-deployment.puml`.
 
 ### 5.3 Cluster Linking and Multi-Region Clusters (Confluent-specific)
 

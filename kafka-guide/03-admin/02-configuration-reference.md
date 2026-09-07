@@ -63,8 +63,8 @@ Examples (3.9/4.0):
 | Config | Mode |
 |--------|------|
 | `process.roles`, `node.id`, `log.dirs`, `controller.quorum.bootstrap.servers`, `inter.broker.listener.name`, `num.partitions`, `default.replication.factor`, `auto.create.topics.enable`, `offsets.topic.*`, `transaction.state.log.*`, `group.initial.rebalance.delay.ms`, `socket.request.max.bytes`, `queued.max.requests` | `read-only` |
-| `listeners`, `advertised.listeners`, `listener.security.protocol.map`, `ssl.keystore.location/password`, `sasl.jaas.config`, `num.recovery.threads.per.data.dir`, `log.flush.*` | `per-broker` |
-| `log.retention.ms/bytes`, `log.segment.bytes`, `log.cleaner.*`, `message.max.bytes`, `min.insync.replicas`, `unclean.leader.election.enable`, `num.io.threads`, `num.network.threads`, `num.replica.fetchers`, `background.threads`, `log.cleaner.threads`, `max.connections`, `max.connections.per.ip`, `compression.type`, `log.message.timestamp.type`, `metric.reporters` | `cluster-wide` |
+| `listeners`, `advertised.listeners`, `listener.security.protocol.map`, `ssl.keystore.location/password`, `ssl.truststore.*`, `sasl.jaas.config`, `sasl.login.*` | `per-broker` |
+| `log.retention.ms/bytes`, `log.segment.bytes`, `log.flush.*`, `log.cleaner.*`, `message.max.bytes`, `min.insync.replicas`, `unclean.leader.election.enable`, `num.io.threads`, `num.network.threads`, `num.replica.fetchers`, `num.recovery.threads.per.data.dir`, `background.threads`, `log.cleaner.threads`, `max.connections`, `max.connections.per.ip`, `compression.type`, `log.message.timestamp.type`, `metric.reporters` | `cluster-wide` |
 
 Thread pool sizes can be changed dynamically but only within a factor of two of the value at startup (halving or doubling) in a single step; make larger changes in several steps.
 

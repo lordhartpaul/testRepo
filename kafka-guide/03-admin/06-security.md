@@ -273,7 +273,7 @@ end note
 @enduml
 ```
 
-Source: `diagrams/06-security-multi-listener-topology.puml`.
+Source: `diagrams/admin-06-security-multi-listener-topology.puml`.
 
 > **Production tip:** the controller listener cannot use SCRAM. SCRAM credentials are stored in the metadata log that the controllers serve, so a controller cannot authenticate a peer with SCRAM before the quorum is up. Use mTLS (`SSL` with `ssl.client.auth=required`), PLAIN with file-based passwords, or GSSAPI on `CONTROLLER`.
 

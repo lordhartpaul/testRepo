@@ -300,7 +300,7 @@ stop
 @enduml
 ```
 
-Source: `diagrams/08-upgrades-and-migration-zk-to-kraft-phases.puml`.
+Source: `diagrams/admin-08-upgrades-and-migration-zk-to-kraft-phases.puml`.
 
 **What breaks or surprises people**
 
@@ -382,13 +382,13 @@ sequenceDiagram
     Note over REP: wait until replication-latency-ms is stable and small
     CG->>CG: 1. stop consumers (drain in-flight work, commit)
     REP->>NEW: 2. final checkpoint sync for billing-app (wait one sync interval)
-    CG->>NEW: 3. start consumers with new bootstrap.servers; they resume from translated offsets
-    Note over CG,NEW: consumers now read replicated data on NEW; producers still write to OLD
+    CG->>NEW: 3. start consumers with new bootstrap.servers, they resume from translated offsets
+    Note over CG,NEW: consumers now read replicated data on NEW, producers still write to OLD
     PR->>PR: 4. stop producer (or flip a feature flag)
     REP->>NEW: 5. wait until MM2 lag for orders = 0 (heartbeat / offsets)
     PR->>NEW: 6. start producer against NEW
-    Note over OLD,NEW: repeat 1-6 per group/producer; topics with no writers on OLD are done
-    REP-->>NEW: 7. stop mirroring topic once no producer writes to OLD; delete OLD topic later
+    Note over OLD,NEW: repeat 1-6 per group and producer. Topics with no writers on OLD are done
+    REP-->>NEW: 7. stop mirroring topic once no producer writes to OLD, delete OLD topic later
 ```
 
 Rules that keep this lossless:
