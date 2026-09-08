@@ -1,0 +1,40 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title KafkaConsumer poll / process / commit loop with cooperative rebalance
+
+participant "Application thread" as App
+participant "KafkaConsumer" as C
+participant "Group coordinator\n(__consumer_offsets leader)" as GC
+participant "Partition leader(s)" as L
+
+App -> C : subscribe(["orders"], rebalanceListener)
+App -> C : poll(1s)
+C -> GC : FindCoordinator / JoinGroup / SyncGroup
+GC --> C : assignment [orders-0, orders-1]
+C -> App : listener.onPartitionsAssigned(...)
+C -> GC : OffsetFetch(orders-0, orders-1)
+GC --> C : committed offsets (or none -> auto.offset.reset)
+C -> L : Fetch(orders-0 @ 1200, orders-1 @ 87)
+L --> C : records (up to max.poll.records returned)
+C --> App : ConsumerRecords
+
+loop every poll
+  App -> App : process records\n(must finish within max.poll.interval.ms)
+  App -> C : commitSync(offsets)
+  C -> GC : OffsetCommit(orders-0 -> lastOffset + 1)
+  GC --> C : ok
+  App -> C : poll(1s)
+  C -> GC : Heartbeat (background thread, heartbeat.interval.ms)
+  C -> L : Fetch (prefetched while processing)
+end
+
+== another member joins ==
+GC --> C : REBALANCE_IN_PROGRESS in Heartbeat response
+App -> C : poll(1s)
+C -> App : listener.onPartitionsRevoked([orders-1])
+App -> C : commitSync({orders-1 -> position})
+C -> GC : JoinGroup (cooperative: keeps orders-0)
+GC --> C : assignment [orders-0]
+C -> App : listener.onPartitionsAssigned([])
+@enduml

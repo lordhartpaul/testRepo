@@ -1,0 +1,28 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Idempotent produce with a lost response and a retry
+
+participant "Application thread" as App
+participant "RecordAccumulator" as Acc
+participant "Sender thread" as Snd
+participant "Leader broker\n(ReplicaManager)" as L
+participant "ProducerStateManager\n(per partition, per PID)" as PSM
+participant "Followers (ISR)" as F
+
+App -> Acc : send(record) -> append to ProducerBatch(orders-0)
+Snd -> Acc : drain ready batches (batch.size full or linger.ms elapsed)
+Snd -> L : ProduceRequest(PID=42, epoch=0, baseSeq=0, 10 records, acks=all)
+L -> PSM : validate: lastSeq(42)=-1, baseSeq=0 -> in order
+L -> L : append batch at offset 100..109
+L -> F : replicate via Fetch
+F --> L : fetch at 110 -> HW=110
+L --> Snd : ProduceResponse(offset=100)
+note right of Snd : response lost on the network
+... request.timeout.ms (30 s) ...
+Snd -> Acc : re-enqueue batch (retry, backoff retry.backoff.ms)
+Snd -> L : ProduceRequest(PID=42, epoch=0, baseSeq=0, 10 records)
+L -> PSM : baseSeq 0..9 matches one of last 5 cached batches
+L --> Snd : ProduceResponse(offset=100) - duplicate, not appended
+Snd -> App : callback(RecordMetadata(orders-0, offset 100))
+@enduml

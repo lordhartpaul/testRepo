@@ -1,0 +1,59 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka multi-listener topology (KRaft, 3 brokers + 3 controllers)
+
+cloud "Internet / partner networks" as inet
+node "DMZ / edge" as dmz {
+  component "Kafka gateway or\nTCP load balancer\n(SNI passthrough)" as gw
+}
+
+package "Private subnet: kafka-brokers" as brokers {
+  node "broker-1" as b1 {
+    interface "INTERNAL :9092\nSASL_SSL (SCRAM)" as b1i
+    interface "EXTERNAL :9093\nSASL_SSL (OAUTHBEARER)" as b1e
+    interface "CONTROLLER-client\nSSL (mTLS)" as b1c
+  }
+  node "broker-2" as b2
+  node "broker-3" as b3
+}
+
+package "Private subnet: kafka-controllers" as ctrls {
+  node "controller-1" as c1 {
+    interface "CONTROLLER :9094\nSSL (mTLS)" as c1l
+  }
+  node "controller-2" as c2
+  node "controller-3" as c3
+}
+
+package "Private subnet: apps" as apps {
+  component "Producers / consumers\n(SCRAM users)" as app
+  component "Kafka Connect\n(mTLS + SCRAM)" as connect
+  component "Schema Registry\n(HTTPS + basic auth)" as sr
+}
+
+inet --> gw : TLS 1.3
+gw --> b1e : SASL_SSL
+gw --> b2 : SASL_SSL
+gw --> b3 : SASL_SSL
+app --> b1i : SASL_SSL
+connect --> b1i : SASL_SSL
+sr --> b1i : SASL_SSL
+b1c --> c1l : SSL (mTLS)\nbroker heartbeats + metadata fetch
+b2 --> c2 : SSL (mTLS)
+b3 --> c3 : SSL (mTLS)
+b1i <--> b2 : replication\n(inter.broker.listener.name=INTERNAL)
+b2 <--> b3 : replication
+c1l <--> c2 : Raft (SSL)
+c2 <--> c3 : Raft (SSL)
+
+note bottom of ctrls
+  Controllers expose only the CONTROLLER listener.
+  No client, producer or consumer ever connects here.
+  SCRAM is not usable on this listener; use mTLS.
+end note
+note bottom of dmz
+  No broker has a public IP.
+  advertised.listeners for EXTERNAL points at the gateway DNS names.
+end note
+@enduml

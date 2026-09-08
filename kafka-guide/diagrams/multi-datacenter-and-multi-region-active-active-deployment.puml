@@ -1,0 +1,61 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Active-active multi-region deployment with MirrorMaker 2
+
+node "Region EU (eu-west-1)" as EU {
+  node "Kafka cluster 'eu'" as KEU {
+    [Brokers x6, 3 AZs\nKRaft controllers x3] as BEU
+    [Topic: orders\n(local writes)] as TEU
+    [Topic: us.orders\n(replicated from US)] as TUS_EU
+    [__consumer_offsets] as OEU
+  }
+  [MM2 cluster (Connect)\nsource=us, target=eu] as MMEU
+  [Schema Registry\n(primary)] as SREU
+  [Producers EU] as PEU
+  [Consumers EU\nread orders + us.orders] as CEU
+}
+
+node "Region US (us-east-1)" as US {
+  node "Kafka cluster 'us'" as KUS {
+    [Brokers x6, 3 AZs\nKRaft controllers x3] as BUS
+    [Topic: orders\n(local writes)] as TUS
+    [Topic: eu.orders\n(replicated from EU)] as TEU_US
+    [__consumer_offsets] as OUS
+  }
+  [MM2 cluster (Connect)\nsource=eu, target=us] as MMUS
+  [Schema Registry\n(secondary, read-only\nor Schema Linking)] as SRUS
+  [Producers US] as PUS
+  [Consumers US\nread orders + eu.orders] as CUS
+}
+
+[Global DNS / GSLB\nkafka.example.com] as DNS
+
+PEU --> BEU : produce (local)
+PUS --> BUS : produce (local)
+CEU --> BEU
+CUS --> BUS
+MMEU ..> BUS : fetch 'orders' from us\n(MM2 runs in target region)
+MMEU --> BEU : write 'us.orders'
+MMUS ..> BEU : fetch 'orders' from eu
+MMUS --> BUS : write 'eu.orders'
+MMEU --> BEU : checkpoints / heartbeats\n(offset translation)
+MMUS --> BUS : checkpoints / heartbeats
+SREU <..> SRUS : schema replication
+PEU ..> DNS
+PUS ..> DNS
+DNS ..> BEU : region-local resolution
+DNS ..> BUS
+
+note bottom of MMEU
+  DefaultReplicationPolicy prefixes
+  source cluster alias -> loop prevention.
+  Cross-region traffic = ingress of the
+  remote region (one direction each).
+end note
+note bottom of KUS
+  Same-key writes in both regions are
+  NOT ordered globally. Use geo-partitioned
+  keys (home region per key) to avoid conflicts.
+end note
+@enduml

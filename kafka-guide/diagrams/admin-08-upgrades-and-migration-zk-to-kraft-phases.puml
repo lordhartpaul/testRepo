@@ -1,0 +1,71 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title ZooKeeper to KRaft migration: activity flow (Kafka 3.9 bridge release)
+
+|Preparation|
+start
+:Upgrade all brokers to 3.9
+(inter.broker.protocol.version=3.9);
+:Verify: no JBOD before 3.7,
+SCRAM needs 3.5+, delegation tokens 3.6+;
+:Back up ZooKeeper snapshot
+and kafka-configs/ACLs export;
+:Read cluster id from ZooKeeper
+(kafka-cluster.sh cluster-id);
+
+|KRaft controllers|
+:Provision 3 controller nodes
+process.roles=controller
+zookeeper.metadata.migration.enable=true
+zookeeper.connect=...
+controller.quorum.voters=...;
+:kafka-storage.sh format with the
+existing cluster id on each controller;
+:Start controllers;
+:Controllers wait: log shows
+"Still waiting for ZK brokers to register";
+
+|ZK brokers (dual-write)|
+:Add to each broker:
+zookeeper.metadata.migration.enable=true
+controller.quorum.voters=...
+controller.listener.names=CONTROLLER
+listener.security.protocol.map += CONTROLLER;
+:Rolling restart brokers (still ZK mode);
+:KRaft controller becomes active controller,
+copies ZK metadata into __cluster_metadata,
+keeps writing to ZK (dual write);
+:Verify metric ZkMigrationState = MIGRATION
+and MigratingZkBrokerCount = 0;
+
+|Brokers to KRaft|
+repeat
+  :Pick one broker;
+  :Replace broker.id with node.id,
+  set process.roles=broker,
+  remove inter.broker.protocol.version,
+  keep zookeeper.connect and migration flag;
+  :Restart broker;
+  :Check under-replicated partitions = 0;
+repeat while (more ZK-mode brokers?) is (yes)
+->no;
+:All brokers in KRaft mode;
+note right
+  Rollback is still possible here:
+  revert brokers one by one to ZK configs,
+  then follow the documented ZK revert steps.
+end note
+
+|Finalize|
+:On controllers: remove
+zookeeper.metadata.migration.enable
+and zookeeper.connect; rolling restart;
+:On brokers: remove
+zookeeper.metadata.migration.enable
+and zookeeper.connect; rolling restart;
+:Verify: ZkMigrationState = POST_MIGRATION,
+kafka-metadata-quorum.sh describe --status;
+:Decommission ZooKeeper ensemble;
+stop
+@enduml

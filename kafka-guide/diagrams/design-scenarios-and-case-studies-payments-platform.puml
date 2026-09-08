@@ -1,0 +1,53 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Scenario 1 - Real-time payments platform (exactly-once, ordered per account)
+
+actor "Channel\n(API / mobile)" as CH
+[Payment API\n(validates, assigns idempotency key)] as API
+database "Payment DB\n(orders + outbox)" as DB
+[Debezium\n(outbox -> Kafka)] as DBZ
+
+node "Kafka cluster (RF=3, min.isr=2,\nunclean=false, 3 AZs)" as K {
+  queue "payments.payment.commands.v1\nkey = account_id, 96 partitions" as CMD
+  queue "payments.ledger.entries.v1\nkey = account_id, 96 partitions\nretention: infinite + tiered" as LED
+  queue "payments.payment.events.v1\nkey = payment_id" as EVT
+  queue "payments.payment.dlq.v1" as DLQ
+  queue "__transaction_state (RF=3, min.isr=2)" as TX
+}
+
+[Ledger processor\n(Kafka Streams, exactly_once_v2,\nstate: account balances,\nstandby replicas=1)] as LP
+[Fraud scorer\n(Flink, event time)] as FR
+[Notification service\n(idempotent consumer)] as NT
+[Core banking sink\n(JDBC upsert by ledger_entry_id)] as CB
+[Audit / lakehouse\n(Iceberg sink)] as LK
+[Schema Registry\n(FULL_TRANSITIVE compatibility)] as SR
+
+CH --> API : POST /payments\nIdempotency-Key
+API --> DB : tx: insert payment + outbox
+DB --> DBZ : WAL
+DBZ --> CMD : PaymentRequested\n(key = account_id)
+CMD --> LP : consume (read_committed)
+LP --> LED : ledger entries\n(same transaction)
+LP --> EVT : PaymentSettled / Rejected
+LP --> TX : transactional.id per task
+LP --> DLQ : unparseable / invalid
+EVT --> FR
+EVT --> NT
+LED --> CB
+LED --> LK
+API ..> SR
+LP ..> SR
+
+note right of LP
+  Ordering per account: all commands for an
+  account hit one partition; one task per
+  partition; no parallelism inside a key.
+  EOS: consume-process-produce atomic;
+  balances in changelog-backed store.
+end note
+note bottom of CB
+  Exactly-once effect into the DB is
+  achieved by idempotent upsert, not XA.
+end note
+@enduml

@@ -1,0 +1,67 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Resilient single-region Kafka reference architecture (3 AZs, KRaft)
+
+node "AZ-a" {
+  [Controller 1\nprocess.roles=controller] as C1
+  [Broker 1\nbroker.rack=az-a] as B1
+  [Broker 4\nbroker.rack=az-a] as B4
+  [Connect worker a] as CWa
+  [Schema Registry a] as SRa
+}
+node "AZ-b" {
+  [Controller 2] as C2
+  [Broker 2\nbroker.rack=az-b] as B2
+  [Broker 5\nbroker.rack=az-b] as B5
+  [Connect worker b] as CWb
+  [Schema Registry b] as SRb
+}
+node "AZ-c" {
+  [Controller 3] as C3
+  [Broker 3\nbroker.rack=az-c] as B3
+  [Broker 6\nbroker.rack=az-c] as B6
+  [Connect worker c] as CWc
+}
+
+cloud "Producers\nacks=all, idempotent,\nbootstrap = 1 broker per AZ" as P
+cloud "Consumers\nclient.rack, static membership,\ncooperative rebalance" as K
+database "Object storage\n(tiered remote log)" as S3
+[Load balancer / DNS\nSchema Registry VIP] as LB
+
+C1 <-> C2 : Raft metadata quorum
+C2 <-> C3
+C1 <-> C3
+B1 ..> C1 : heartbeat / metadata
+B2 ..> C2
+B3 ..> C3
+B1 <-> B2 : replication\n(RF=3, one replica per AZ)
+B2 <-> B3
+B1 <-> B3
+P --> B1
+P --> B2
+P --> B3
+K --> B1 : fetch from local AZ\n(KIP-392)
+K --> B2
+K --> B3
+B1 --> S3 : tiered upload
+B2 --> S3
+B3 --> S3
+CWa <-> CWb : Connect group
+CWb <-> CWc
+SRa --> LB
+SRb --> LB
+P ..> LB : schema lookup (cached)
+K ..> LB
+
+note bottom of C3
+  Quorum of 3 survives 1 AZ loss.
+  Quorum of 5 across 3 AZs survives
+  1 AZ + 1 node.
+end note
+note right of B6
+  Topic policy: RF=3,
+  min.insync.replicas=2,
+  unclean.leader.election.enable=false
+end note
+@enduml

@@ -1,0 +1,50 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Production KRaft topology - 3 controllers, 6 brokers, 3 availability zones
+
+node "AZ-a (broker.rack=az-a)" as aza {
+  node "controller-0\nprocess.roles=controller\nnode.id=1000" as c0
+  node "broker-1\nprocess.roles=broker\nnode.id=1" as b1 {
+    database "/data/kafka-1\n(NVMe, XFS noatime)" as d1
+  }
+  node "broker-4\nnode.id=4" as b4 {
+    database "/data/kafka-4" as d4
+  }
+}
+node "AZ-b (broker.rack=az-b)" as azb {
+  node "controller-1\nnode.id=1001" as c1
+  node "broker-2\nnode.id=2" as b2 {
+    database "/data/kafka-2" as d2
+  }
+  node "broker-5\nnode.id=5" as b5 {
+    database "/data/kafka-5" as d5
+  }
+}
+node "AZ-c (broker.rack=az-c)" as azc {
+  node "controller-2\nnode.id=1002" as c2
+  node "broker-3\nnode.id=3" as b3 {
+    database "/data/kafka-3" as d3
+  }
+  node "broker-6\nnode.id=6" as b6 {
+    database "/data/kafka-6" as d6
+  }
+}
+
+cloud "Clients\n(bootstrap.servers=broker-1:9092,broker-2:9092,broker-3:9092)" as clients
+
+c0 <-> c1 : Raft :9093\n(CONTROLLER listener)
+c1 <-> c2 : Raft :9093
+c0 <-> c2 : Raft :9093
+
+b1 --> c0 : metadata fetch :9093
+b2 --> c1 : metadata fetch :9093
+b3 --> c2 : metadata fetch :9093
+
+b1 <-> b2 : replication :9094\n(INTERNAL listener)
+b2 <-> b3 : replication :9094
+
+clients --> b1 : produce/fetch :9092\n(EXTERNAL listener)
+clients --> b2
+clients --> b3
+@enduml

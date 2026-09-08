@@ -1,0 +1,60 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka incident handling: from page to postmortem
+
+|On-call|
+start
+:Page received
+(alert name, cluster, severity);
+:Acknowledge; open incident channel;
+:Classify blast radius
+(one partition / one broker / cluster / clients only);
+if (Data plane down?\n(OfflinePartitions > 0 or producers failing)) then (yes)
+  :Declare SEV1; page secondary;
+else (no)
+  :SEV2/3; continue solo;
+endif
+
+|Diagnose|
+:Symptom -> metric
+(UnderReplicatedPartitions, OfflinePartitionsCount,
+ActiveControllerCount, RequestHandlerAvgIdlePercent,
+records-lag-max, failed-authentication-total);
+:Metric -> log
+(server.log, controller.log, state-change.log,
+client logs; grep the timestamp window);
+:Log -> cause
+(config, capacity, code, network, disk, GC, security);
+if (Cause identified?) then (no)
+  :Collect evidence:
+  jstack, jcmd GC.heap_info, ss -s, iostat -x,
+  kafka-log-dirs.sh, kafka-metadata-quorum.sh;
+  :Escalate to platform owner;
+endif
+
+|Mitigate|
+:Pick the smallest reversible action
+(restart one broker, throttle a client,
+raise a quota, move a leader, pause a connector);
+:Apply; watch the metric that paged for 5 minutes;
+if (Recovered?) then (no)
+  :Roll back the action;
+  :Next hypothesis;
+  detach
+endif
+
+|Recover|
+:Restore redundancy
+(URP = 0, ISR full, preferred leaders,
+consumer lag draining);
+:Verify with clients, not only with broker metrics;
+:Close incident; timeline in the channel;
+
+|Follow-up|
+:Postmortem within 5 working days;
+:Actions: alert threshold, capacity, config,
+runbook update, automation;
+:Add the case to this chapter's runbooks;
+stop
+@enduml

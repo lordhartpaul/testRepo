@@ -1,0 +1,33 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Transactional outbox with Debezium CDC (order service -> Kafka)
+
+participant "Order service" as Svc
+database "PostgreSQL\n(orders, outbox tables)" as DB
+participant "Debezium PostgresConnector\n(Connect worker)" as DBZ
+participant "SMT: EventRouter\n(io.debezium.transforms.outbox.EventRouter)" as SMT
+queue "topic: outbox.event.Order" as T
+participant "Consumer\n(idempotent by event id)" as C
+database "Consumer store\n(processed_events)" as CS
+
+Svc -> DB : BEGIN
+Svc -> DB : INSERT INTO orders (...)
+Svc -> DB : INSERT INTO outbox\n(id=uuid, aggregatetype='Order',\n aggregateid=orderId, type='OrderCreated',\n payload=json)
+Svc -> DB : COMMIT
+note over Svc,DB : one local ACID transaction:\nno dual-write problem
+
+DB -> DBZ : WAL: INSERT outbox row
+DBZ -> SMT : change event {after: {id, aggregatetype, aggregateid, type, payload}}
+SMT -> T : key = aggregateid\nvalue = payload\nheaders: id (event id), eventType\ntopic = outbox.event.<aggregatetype>
+note right of SMT : DELETE of the outbox row is\nignored by the router; the table\ncan be pruned independently
+
+T -> C : poll()
+C -> CS : SELECT 1 FROM processed_events WHERE id = ?
+alt not seen
+  C -> CS : apply effect + INSERT processed_events(id)\n(same DB transaction)
+else duplicate (redelivery)
+  C -> C : skip
+end
+C -> T : commit offset
+@enduml

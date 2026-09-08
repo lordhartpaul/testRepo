@@ -1,0 +1,39 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Transactional consume-transform-produce (transactional.id = ctp-1, protocol v1/KIP-447)
+
+participant "App (consumer +\ntransactional producer)" as App
+participant "Transaction coordinator\n(leader of __transaction_state p=hash(tid)%50)" as TC
+participant "Group coordinator\n(__consumer_offsets)" as GC
+participant "Leader of output-0" as L
+participant "read_committed\nconsumer" as RC
+
+== startup ==
+App -> TC : InitProducerId(transactional.id=ctp-1)
+TC -> TC : abort any ongoing txn of ctp-1,\nbump producer epoch (fences zombies)
+TC --> App : PID=7, epoch=3
+
+== per batch ==
+App -> GC : poll(): fetch input records
+App -> App : beginTransaction()  (local state only)
+App -> TC : AddPartitionsToTxn(output-0)\n(implicit in protocol v2 / KIP-890)
+TC -> TC : state Empty -> Ongoing,\nwrite to __transaction_state
+App -> L : Produce(output-0, PID=7, epoch=3, seq)\n[transactional bit set]
+App -> TC : AddOffsetsToTxn(group=ctp-group)
+App -> GC : TxnOffsetCommit(offsets, PID, epoch,\ngeneration id, member id)
+GC -> GC : verify group generation\n(rejects zombie with old generation)
+App -> TC : EndTxn(commit)
+TC -> TC : Ongoing -> PrepareCommit\n(persisted)
+TC -> L : WriteTxnMarkers(COMMIT, PID=7)
+TC -> GC : WriteTxnMarkers(COMMIT) on __consumer_offsets
+L -> L : append control record COMMIT,\nadvance LSO past this txn
+TC -> TC : PrepareCommit -> CompleteCommit
+TC --> App : EndTxn ok
+L --> RC : Fetch returns records\nup to LSO (aborted ones filtered)
+
+== zombie ==
+participant "Zombie instance\n(same transactional.id, epoch 2)" as Z
+Z -> L : Produce(PID=7, epoch=2)
+L --> Z : INVALID_PRODUCER_EPOCH\n-> ProducerFencedException
+@enduml

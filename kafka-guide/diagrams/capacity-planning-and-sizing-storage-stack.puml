@@ -1,0 +1,42 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka broker storage stack - where capacity is consumed
+
+package "Broker process (JVM heap 4-8 GB)" {
+  [Request handler threads] as RH
+  [Replica fetcher threads] as RF
+  [Log manager\n(segments, indexes, cleaner)] as LM
+  [Remote log manager\n(tiered storage, KIP-405)] as RLM
+}
+
+package "Operating system" {
+  [Page cache\n(RAM minus heap = hot data set)] as PC
+  [Block layer / filesystem (XFS, ext4)] as FS
+}
+
+database "Local disks\n(NVMe / gp3 / PD)\nhot tier: hours to days" as DISK
+cloud "Object storage\n(S3 / GCS / Blob)\ncold tier: days to years" as OBJ
+
+RH --> LM : append (sequential write)
+RF --> LM : follower append
+LM --> PC : write-through
+PC --> FS : flush (OS, not log.flush.*)
+FS --> DISK
+RH <-- PC : consumer fetch\n(zero-copy sendfile, cache hit)
+RH <-- DISK : lagging consumer fetch\n(cache miss = disk read IOPS)
+LM --> RLM : segment rolled and\nfully replicated
+RLM --> OBJ : upload
+RH <-- RLM : fetch older than\nlocal.retention.ms
+
+note right of PC
+  Size RAM so that
+  (write rate per broker x consumer lag window)
+  fits with ~30% spare.
+end note
+note bottom of DISK
+  Storage per broker =
+  ingress x retention x RF x 1.1 / N
+  keep below 70% of raw capacity
+end note
+@enduml

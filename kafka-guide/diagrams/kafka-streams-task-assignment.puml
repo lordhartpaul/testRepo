@@ -1,0 +1,55 @@
+@startuml
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Kafka Streams: topology to tasks to threads (application.id = wordcount, 4 input partitions)
+
+package "Kafka cluster" {
+  queue "text-lines (4 partitions)" as IN
+  queue "wordcount-counts-store-repartition (4)" as REP
+  queue "wordcount-counts-store-changelog (4, compacted)" as CL
+  queue "word-counts (4)" as OUT
+}
+
+package "Instance A (num.stream.threads=2)" {
+  node "StreamThread-1" as T1 {
+    component "Task 0_0\nsub-topology 0, partition 0" as T00
+    component "Task 1_0\nsub-topology 1, partition 0\n[RocksDB counts-store]" as T10
+  }
+  node "StreamThread-2" as T2 {
+    component "Task 0_1" as T01
+    component "Task 1_1\n[RocksDB counts-store]" as T11
+  }
+}
+
+package "Instance B (num.stream.threads=2)" {
+  node "StreamThread-1 " as T3 {
+    component "Task 0_2" as T02
+    component "Task 1_2\n[RocksDB counts-store]" as T12
+  }
+  node "StreamThread-2 " as T4 {
+    component "Task 0_3" as T03
+    component "Task 1_3\n[RocksDB counts-store]" as T13
+    component "Standby 1_0\n(num.standby.replicas=1)" as S10
+  }
+}
+
+IN --> T00 : partition 0
+IN --> T01 : partition 1
+IN --> T02 : partition 2
+IN --> T03 : partition 3
+T00 --> REP : flatMap + selectKey\n(key changed -> repartition)
+T01 --> REP
+T02 --> REP
+T03 --> REP
+REP --> T10 : partition 0
+REP --> T11 : partition 1
+REP --> T12 : partition 2
+REP --> T13 : partition 3
+T10 --> CL : state updates
+T10 --> OUT
+T11 --> CL
+T11 --> OUT
+T12 --> OUT
+T13 --> OUT
+CL ..> S10 : replays changelog\n(hot standby)
+@enduml
